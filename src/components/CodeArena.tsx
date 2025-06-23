@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +8,8 @@ import {
   Clock, User, Trophy, CheckCircle, XCircle, 
   Play, Code, Target, Zap, Crown, Home 
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface PlayerData {
   name: string;
@@ -28,8 +29,14 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
   const [submissions, setSubmissions] = useState(0);
   const [gameStatus, setGameStatus] = useState<'active' | 'won' | 'lost'>('active');
   const [testResults, setTestResults] = useState<Array<{case: number, passed: boolean, expected: string, actual: string}>>([]);
+  const [matchReported, setMatchReported] = useState(false);
+  const { toast } = useToast();
   
   const opponentName = "CodeMaster42";
+  const opponentId = "mock-opponent-id"; // In real implementation, this would come from matchmaking
+  const roomId = `room_${Date.now()}`; // Generate unique room ID
+  const problemId = "two_sum"; // Current problem identifier
+  
   const problem = {
     title: "Two Sum",
     difficulty: "Easy",
@@ -48,6 +55,67 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
     ]
   };
 
+  const reportMatchResult = async (winnerId: string, loserId: string) => {
+    if (matchReported) return; // Prevent duplicate reports
+    
+    try {
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No authenticated user found');
+        return;
+      }
+
+      // Insert match result
+      const { error: matchError } = await supabase
+        .from('match_results')
+        .insert({
+          room_id: roomId,
+          player1_id: user.id,
+          player2_id: opponentId,
+          winner_id: winnerId,
+          problem_id: problemId
+        });
+
+      if (matchError) {
+        console.error('Error saving match result:', matchError);
+        toast({
+          title: "Error",
+          description: "Failed to save match result",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update user stats using RPC function
+      const { error: statsError } = await supabase.rpc('update_user_stats', {
+        winner_id: winnerId,
+        loser_id: loserId
+      });
+
+      if (statsError) {
+        console.error('Error updating user stats:', statsError);
+        toast({
+          title: "Error", 
+          description: "Failed to update player stats",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setMatchReported(true);
+      console.log('Match result and stats updated successfully');
+      
+    } catch (error) {
+      console.error('Unexpected error reporting match result:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (gameStatus === 'active') {
       const timer = setInterval(() => {
@@ -62,6 +130,24 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
       return () => clearInterval(timer);
     }
   }, [gameTime, gameStatus]);
+
+  // Report match result when game status changes
+  useEffect(() => {
+    const handleMatchEnd = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (gameStatus === 'won') {
+        await reportMatchResult(user.id, opponentId);
+      } else if (gameStatus === 'lost') {
+        await reportMatchResult(opponentId, user.id);
+      }
+    };
+
+    if (gameStatus !== 'active') {
+      handleMatchEnd();
+    }
+  }, [gameStatus]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

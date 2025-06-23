@@ -9,6 +9,58 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      match_results: {
+        Row: {
+          created_at: string | null
+          id: string
+          player1_id: string | null
+          player2_id: string | null
+          problem_id: string | null
+          room_id: string
+          winner_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          player1_id?: string | null
+          player2_id?: string | null
+          problem_id?: string | null
+          room_id: string
+          winner_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          player1_id?: string | null
+          player2_id?: string | null
+          problem_id?: string | null
+          room_id?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_results_player1_id_fkey"
+            columns: ["player1_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_results_player2_id_fkey"
+            columns: ["player2_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_results_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -50,7 +102,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_user_stats: {
+        Args: { winner_id: string; loser_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
