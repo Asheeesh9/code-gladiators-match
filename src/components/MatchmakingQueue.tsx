@@ -4,40 +4,218 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Users, Clock, X, Swords } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface MatchmakingQueueProps {
-  onMatchFound: () => void;
+  onMatchFound: (roomCode: string) => void;
   onCancel: () => void;
+}
+
+interface QueueEntry {
+  id: string;
+  user_id: string;
+  user_profile: {
+    username: string;
+    rating: number;
+  };
+  created_at: string;
+}
+
+interface MatchRoom {
+  id: string;
+  room_code: string;
+  player1_id: string;
+  player2_id: string;
+  problem_id: string;
+  status: string;
 }
 
 const MatchmakingQueue: React.FC<MatchmakingQueueProps> = ({ onMatchFound, onCancel }) => {
   const [queueTime, setQueueTime] = useState(0);
-  const [playersInQueue, setPlayersInQueue] = useState(12);
+  const [playersInQueue, setPlayersInQueue] = useState(0);
   const [matchingStatus, setMatchingStatus] = useState<'searching' | 'found' | 'connecting'>('searching');
+  const [inQueue, setInQueue] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setQueueTime(prev => prev + 1);
-      
-      // Simulate queue dynamics
-      if (Math.random() < 0.1) {
-        setPlayersInQueue(prev => Math.max(1, prev + (Math.random() > 0.5 ? 1 : -1)));
+    initializeMatchmaking();
+    return () => {
+      if (inQueue && currentUserId) {
+        leaveQueue();
       }
-      
-      // Simulate match found after 8-15 seconds
-      if (queueTime > 8 && Math.random() < 0.15) {
-        setMatchingStatus('found');
-        setTimeout(() => {
-          setMatchingStatus('connecting');
-          setTimeout(() => {
-            onMatchFound();
-          }, 2000);
-        }, 1500);
-      }
-    }, 1000);
+    };
+  }, []);
 
-    return () => clearInterval(timer);
-  }, [queueTime, onMatchFound]);
+  useEffect(() => {
+    if (matchingStatus === 'searching' && inQueue) {
+      const timer = setInterval(() => {
+        setQueueTime(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [matchingStatus, inQueue]);
+
+  const initializeMatchmaking = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to join the queue",
+          variant: "destructive",
+        });
+        onCancel();
+        return;
+      }
+
+      setCurrentUserId(user.id);
+      await joinQueue(user.id);
+      setupRealtimeSubscriptions(user.id);
+    } catch (error) {
+      console.error('Error initializing matchmaking:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join matchmaking queue",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const joinQueue = async (userId: string) => {
+    try {
+      // Get user profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, rating')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // Join the queue
+      const { error: insertError } = await supabase
+        .from('matchmaking_queue')
+        .insert({
+          user_id: userId,
+          user_profile: {
+            username: profile.username,
+            rating: profile.rating
+          }
+        });
+
+      if (insertError) throw insertError;
+
+      setInQueue(true);
+      console.log('Successfully joined matchmaking queue');
+
+      // Try to create a match immediately
+      await tryCreateMatch();
+    } catch (error) {
+      console.error('Error joining queue:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join queue",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const leaveQueue = async () => {
+    if (!currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('matchmaking_queue')
+        .delete()
+        .eq('user_id', currentUserId);
+
+      if (error) throw error;
+      
+      setInQueue(false);
+      console.log('Left matchmaking queue');
+    } catch (error) {
+      console.error('Error leaving queue:', error);
+    }
+  };
+
+  const tryCreateMatch = async () => {
+    try {
+      const { error } = await supabase.rpc('create_match_from_queue');
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error creating match:', error);
+    }
+  };
+
+  const setupRealtimeSubscriptions = (userId: string) => {
+    // Listen for queue changes
+    const queueChannel = supabase
+      .channel('matchmaking_queue_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'matchmaking_queue'
+        },
+        async (payload) => {
+          console.log('Queue change:', payload);
+          
+          // Update queue count
+          const { data: queueData } = await supabase
+            .from('matchmaking_queue')
+            .select('*');
+          setPlayersInQueue(queueData?.length || 0);
+
+          // Try to create match when new player joins
+          if (payload.eventType === 'INSERT') {
+            setTimeout(() => tryCreateMatch(), 1000);
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen for match room creation
+    const matchChannel = supabase
+      .channel('match_rooms_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'match_rooms'
+        },
+        (payload) => {
+          console.log('New match room:', payload);
+          const matchRoom = payload.new as MatchRoom;
+          
+          // Check if current user is in this match
+          if (matchRoom.player1_id === userId || matchRoom.player2_id === userId) {
+            setMatchingStatus('found');
+            setTimeout(() => {
+              setMatchingStatus('connecting');
+              setTimeout(() => {
+                onMatchFound(matchRoom.room_code);
+              }, 2000);
+            }, 1500);
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup function
+    return () => {
+      supabase.removeChannel(queueChannel);
+      supabase.removeChannel(matchChannel);
+    };
+  };
+
+  const handleCancel = async () => {
+    await leaveQueue();
+    onCancel();
+  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -94,18 +272,18 @@ const MatchmakingQueue: React.FC<MatchmakingQueueProps> = ({ onMatchFound, onCan
 
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Average wait time</span>
-              <span className="text-white">~45s</span>
+              <span className="text-gray-400">Matching system</span>
+              <Badge variant="outline" className="text-cyan-400 border-cyan-400">Real-time</Badge>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Skill matching</span>
-              <Badge variant="outline" className="text-cyan-400 border-cyan-400">Active</Badge>
+              <Badge variant="outline" className="text-purple-400 border-purple-400">Active</Badge>
             </div>
           </div>
 
           {matchingStatus === 'searching' && (
             <Button 
-              onClick={onCancel}
+              onClick={handleCancel}
               variant="outline" 
               className="w-full border-red-500/50 text-red-400 hover:bg-red-500/20"
             >

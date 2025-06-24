@@ -61,6 +61,68 @@ export type Database = {
           },
         ]
       }
+      match_rooms: {
+        Row: {
+          created_at: string
+          id: string
+          player1_id: string
+          player2_id: string
+          problem_id: string
+          room_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          player1_id: string
+          player2_id: string
+          problem_id: string
+          room_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          player1_id?: string
+          player2_id?: string
+          problem_id?: string
+          room_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_rooms_problem_id_fkey"
+            columns: ["problem_id"]
+            isOneToOne: false
+            referencedRelation: "problems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matchmaking_queue: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          user_profile: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          user_profile: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          user_profile?: Json
+        }
+        Relationships: []
+      }
       problems: {
         Row: {
           created_at: string
@@ -132,6 +194,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_match_from_queue: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       update_user_stats: {
         Args: { winner_id: string; loser_id: string }
         Returns: undefined

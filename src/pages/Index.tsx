@@ -26,6 +26,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -93,6 +94,7 @@ const Index = () => {
       setSession(null);
       setProfile(null);
       setGameState('landing');
+      setCurrentRoomCode(null);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -110,12 +112,14 @@ const Index = () => {
     setGameState('queue');
   };
 
-  const handleMatchFound = () => {
+  const handleMatchFound = (roomCode: string) => {
+    setCurrentRoomCode(roomCode);
     setGameState('arena');
   };
 
   const handleReturnHome = () => {
     setGameState('landing');
+    setCurrentRoomCode(null);
   };
 
   if (loading) {
@@ -134,11 +138,15 @@ const Index = () => {
   }
 
   if (gameState === 'arena') {
-    return <CodeArena onGameEnd={handleReturnHome} playerData={profile ? {
-      name: profile.username,
-      wins: profile.wins,
-      losses: profile.losses
-    } : { name: 'Player', wins: 0, losses: 0 }} />;
+    return <CodeArena 
+      onGameEnd={handleReturnHome} 
+      roomCode={currentRoomCode}
+      playerData={profile ? {
+        name: profile.username,
+        wins: profile.wins,
+        losses: profile.losses
+      } : { name: 'Player', wins: 0, losses: 0 }} 
+    />;
   }
 
   return (
@@ -205,7 +213,7 @@ const Index = () => {
           </Button>
         </div>
 
-        {/* ... keep existing code (stats section) */}
+        {/* Stats Section */}
         <div className="grid md:grid-cols-3 gap-6 mb-16">
           <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm hover:bg-slate-800/70 transition-all duration-300">
             <CardHeader className="text-center">
@@ -276,7 +284,7 @@ const Index = () => {
           </Card>
         )}
 
-        {/* ... keep existing code (how it works section) */}
+        {/* How It Works Section */}
         <div className="text-center">
           <h2 className="text-3xl font-bold mb-8 text-white">How It Works</h2>
           <div className="grid md:grid-cols-4 gap-6">
