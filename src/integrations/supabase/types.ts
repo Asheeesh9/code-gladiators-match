@@ -61,6 +61,36 @@ export type Database = {
           },
         ]
       }
+      problems: {
+        Row: {
+          created_at: string
+          description: string
+          difficulty: string
+          id: string
+          test_cases: Json
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          difficulty: string
+          id?: string
+          test_cases: Json
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          difficulty?: string
+          id?: string
+          test_cases?: Json
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,18 @@ interface CodeArenaProps {
   playerData: PlayerData;
 }
 
+interface Problem {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: string;
+  test_cases: Array<{
+    input: any;
+    output: any;
+    explanation: string;
+  }>;
+}
+
 const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
   const [gameTime, setGameTime] = useState(0);
   const [code, setCode] = useState('# Write your solution here\ndef solve(nums):\n    pass');
@@ -30,33 +43,72 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
   const [gameStatus, setGameStatus] = useState<'active' | 'won' | 'lost'>('active');
   const [testResults, setTestResults] = useState<Array<{case: number, passed: boolean, expected: string, actual: string}>>([]);
   const [matchReported, setMatchReported] = useState(false);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [loadingProblem, setLoadingProblem] = useState(true);
   const { toast } = useToast();
   
   const opponentName = "CodeMaster42";
   const opponentId = "mock-opponent-id"; // In real implementation, this would come from matchmaking
   const roomId = `room_${Date.now()}`; // Generate unique room ID
-  const problemId = "two_sum"; // Current problem identifier
-  
-  const problem = {
-    title: "Two Sum",
-    difficulty: "Easy",
-    description: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
-    examples: [
-      {
-        input: "nums = [2,7,11,15], target = 9",
-        output: "[0,1]",
-        explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]."
+
+  const fetchRandomProblem = async () => {
+    try {
+      setLoadingProblem(true);
+      
+      // Fetch all problems and select one randomly
+      const { data: problems, error } = await supabase
+        .from('problems')
+        .select('*');
+
+      if (error) {
+        console.error('Error fetching problems:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load problem",
+          variant: "destructive",
+        });
+        return;
       }
-    ],
-    constraints: [
-      "2 ≤ nums.length ≤ 10⁴",
-      "-10⁹ ≤ nums[i] ≤ 10⁹",
-      "Only one valid answer exists."
-    ]
+
+      if (problems && problems.length > 0) {
+        // Select a random problem
+        const randomIndex = Math.floor(Math.random() * problems.length);
+        const selectedProblem = problems[randomIndex];
+        
+        setProblem({
+          id: selectedProblem.id,
+          title: selectedProblem.title,
+          description: selectedProblem.description,
+          difficulty: selectedProblem.difficulty,
+          test_cases: selectedProblem.test_cases as Array<{
+            input: any;
+            output: any;
+            explanation: string;
+          }>
+        });
+
+        console.log('Loaded problem:', selectedProblem.title);
+      } else {
+        toast({
+          title: "Error",
+          description: "No problems available",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching problem:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load problem",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingProblem(false);
+    }
   };
 
   const reportMatchResult = async (winnerId: string, loserId: string) => {
-    if (matchReported) return; // Prevent duplicate reports
+    if (matchReported || !problem) return; // Prevent duplicate reports
     
     try {
       // Get current user ID
@@ -74,7 +126,7 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
           player1_id: user.id,
           player2_id: opponentId,
           winner_id: winnerId,
-          problem_id: problemId
+          problem_id: problem.id
         });
 
       if (matchError) {
@@ -115,6 +167,10 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
       });
     }
   };
+
+  useEffect(() => {
+    fetchRandomProblem();
+  }, []);
 
   useEffect(() => {
     if (gameStatus === 'active') {
@@ -172,6 +228,37 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
       setTimeout(() => setGameStatus('won'), 1000);
     }
   };
+
+  if (loadingProblem) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <Code className="h-12 w-12 text-cyan-400 animate-pulse mx-auto mb-4" />
+          <p className="text-gray-300">Loading problem...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!problem) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-red-900 to-slate-900 text-white flex items-center justify-center">
+        <Card className="w-full max-w-md bg-slate-800/50 border-red-500/50 backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <XCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <CardTitle className="text-3xl text-red-400">Error</CardTitle>
+            <p className="text-gray-300">Failed to load problem</p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center">
+            <Button onClick={onGameEnd} className="w-full bg-gradient-to-r from-cyan-500 to-purple-500">
+              <Home className="mr-2 h-4 w-4" />
+              Return to Arena
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (gameStatus === 'won') {
     return (
@@ -271,23 +358,18 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData }) => {
               </p>
               
               <div>
-                <h4 className="font-semibold text-white mb-2">Example:</h4>
-                <div className="bg-slate-900/50 p-3 rounded border border-slate-600">
-                  <div className="text-sm font-mono space-y-1">
-                    <div><span className="text-cyan-400">Input:</span> <span className="text-gray-300">{problem.examples[0].input}</span></div>
-                    <div><span className="text-green-400">Output:</span> <span className="text-gray-300">{problem.examples[0].output}</span></div>
-                    <div className="text-gray-400 text-xs mt-2">{problem.examples[0].explanation}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-white mb-2">Constraints:</h4>
-                <ul className="text-sm text-gray-300 space-y-1">
-                  {problem.constraints.map((constraint, idx) => (
-                    <li key={idx} className="font-mono">• {constraint}</li>
+                <h4 className="font-semibold text-white mb-2">Examples:</h4>
+                <div className="space-y-3">
+                  {problem.test_cases.slice(0, 2).map((testCase, idx) => (
+                    <div key={idx} className="bg-slate-900/50 p-3 rounded border border-slate-600">
+                      <div className="text-sm font-mono space-y-1">
+                        <div><span className="text-cyan-400">Input:</span> <span className="text-gray-300">{JSON.stringify(testCase.input)}</span></div>
+                        <div><span className="text-green-400">Output:</span> <span className="text-gray-300">{JSON.stringify(testCase.output)}</span></div>
+                        <div className="text-gray-400 text-xs mt-2">{testCase.explanation}</div>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
 
               {testResults.length > 0 && (
