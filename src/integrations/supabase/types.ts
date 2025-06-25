@@ -69,6 +69,7 @@ export type Database = {
           player2_id: string
           problem_id: string
           room_code: string
+          room_type: string
           status: string
           updated_at: string
         }
@@ -79,6 +80,7 @@ export type Database = {
           player2_id: string
           problem_id: string
           room_code: string
+          room_type?: string
           status?: string
           updated_at?: string
         }
@@ -89,6 +91,7 @@ export type Database = {
           player2_id?: string
           problem_id?: string
           room_code?: string
+          room_type?: string
           status?: string
           updated_at?: string
         }
@@ -122,6 +125,44 @@ export type Database = {
           user_profile?: Json
         }
         Relationships: []
+      }
+      private_rooms: {
+        Row: {
+          created_at: string
+          creator_id: string
+          id: string
+          problem_id: string
+          room_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          id?: string
+          problem_id: string
+          room_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          id?: string
+          problem_id?: string
+          room_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "private_rooms_problem_id_fkey"
+            columns: ["problem_id"]
+            isOneToOne: false
+            referencedRelation: "problems"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       problems: {
         Row: {
@@ -197,6 +238,14 @@ export type Database = {
       create_match_from_queue: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      create_private_room: {
+        Args: { user_id_param: string }
+        Returns: string
+      }
+      join_private_room: {
+        Args: { room_code_param: string; joiner_id: string }
+        Returns: string
       }
       update_user_stats: {
         Args: { winner_id: string; loser_id: string }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Swords } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +11,7 @@ import HeroSection from "@/components/HeroSection";
 import StatsSection from "@/components/StatsSection";
 import PlayerStatsCard from "@/components/PlayerStatsCard";
 import HowItWorksSection from "@/components/HowItWorksSection";
+import PrivateRoomWaiting from "@/components/PrivateRoomWaiting";
 
 interface UserProfile {
   id: string;
@@ -23,8 +23,10 @@ interface UserProfile {
   rating: number;
 }
 
+type GameState = 'landing' | 'queue' | 'arena' | 'private-waiting' | 'private-arena';
+
 const Index = () => {
-  const [gameState, setGameState] = useState<'landing' | 'queue' | 'arena'>('landing');
+  const [gameState, setGameState] = useState<GameState>('landing');
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -115,9 +117,24 @@ const Index = () => {
     setGameState('queue');
   };
 
+  const handleCreateRoom = (roomCode: string) => {
+    setCurrentRoomCode(roomCode);
+    setGameState('private-waiting');
+  };
+
+  const handleJoinRoom = (roomCode: string) => {
+    setCurrentRoomCode(roomCode);
+    setGameState('private-arena');
+  };
+
   const handleMatchFound = (roomCode: string) => {
     setCurrentRoomCode(roomCode);
     setGameState('arena');
+  };
+
+  const handlePrivateMatchReady = (roomCode: string) => {
+    setCurrentRoomCode(roomCode);
+    setGameState('private-arena');
   };
 
   const handleReturnHome = () => {
@@ -140,7 +157,17 @@ const Index = () => {
     return <MatchmakingQueue onMatchFound={handleMatchFound} onCancel={handleReturnHome} />;
   }
 
-  if (gameState === 'arena') {
+  if (gameState === 'private-waiting') {
+    return (
+      <PrivateRoomWaiting 
+        roomCode={currentRoomCode!}
+        onMatchFound={handlePrivateMatchReady}
+        onCancel={handleReturnHome}
+      />
+    );
+  }
+
+  if (gameState === 'arena' || gameState === 'private-arena') {
     return <CodeArena 
       onGameEnd={handleReturnHome} 
       roomCode={currentRoomCode}
@@ -159,7 +186,12 @@ const Index = () => {
 
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-8">
-        <HeroSection user={user} onJoinQueue={handleJoinQueue} />
+        <HeroSection 
+          user={user} 
+          onJoinQueue={handleJoinQueue}
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+        />
 
         {/* Stats Section */}
         <StatsSection />
