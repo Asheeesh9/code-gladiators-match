@@ -292,20 +292,25 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData, roomCode }
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (results: Array<{case: number, passed: boolean, expected: string, actual: string}>) => {
     setSubmissions(prev => prev + 1);
+    setTestResults(results);
     
-    const mockResults = problem?.test_cases.slice(0, 3).map((_, index) => ({
-      case: index + 1,
-      passed: Math.random() > 0.3,
-      expected: JSON.stringify(problem.test_cases[index]?.output || ""),
-      actual: JSON.stringify(problem.test_cases[index]?.output || "")
-    })) || [];
-    
-    setTestResults(mockResults);
-    
-    if (mockResults.every(result => result.passed)) {
+    // Check if all test cases passed
+    if (results.every(result => result.passed)) {
       setTimeout(() => setGameStatus('won'), 1000);
+      toast({
+        title: "Success!",
+        description: "All test cases passed! You won the match!",
+        variant: "default",
+      });
+    } else {
+      const passedCount = results.filter(r => r.passed).length;
+      toast({
+        title: "Test Results",
+        description: `${passedCount}/${results.length} test cases passed`,
+        variant: passedCount > 0 ? "default" : "destructive",
+      });
     }
   };
 
@@ -371,6 +376,7 @@ const CodeArena: React.FC<CodeArenaProps> = ({ onGameEnd, playerData, roomCode }
             onCodeChange={setCode}
             onSubmit={handleSubmit}
             submissions={submissions}
+            problem={problem!}
           />
         </div>
       </div>
